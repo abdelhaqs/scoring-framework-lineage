@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bond.credit — Scoring Framework Schema</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;font-family:'Segoe UI',system-ui,sans-serif;color:#e6edf3;min-height:100vh}
+
+/* ── Header ── */
+.hdr{text-align:center;padding:28px 16px 8px}
+.hdr h1{font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#e6edf3}
+.hdr .sub{font-size:11px;color:#58a6ff;font-family:monospace;margin-top:5px}
+.pill{display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;
+  margin:12px auto 20px;border:1px solid #1f6feb44;background:#161b22;border-radius:999px;
+  padding:5px 18px;font-size:11px;color:#79b8ff}
+.live{width:7px;height:7px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950;
+  animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── Section titles ── */
+.sec-title{
+  font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:#58a6ff;padding:0 24px 10px;margin-top:32px;
+  display:flex;align-items:center;gap:10px;
+}
+.sec-title::after{content:'';flex:1;height:1px;background:#21262d}
+
+/* ── Agent cards ── */
+.agents{display:flex;flex-wrap:wrap;gap:14px;padding:0 24px 4px;justify-content:center}
+.agent-card{
+  background:#161b22;border:1px solid #30363d;border-radius:10px;
+  width:200px;padding:16px 18px 14px;cursor:pointer;
+  transition:border-color .2s, transform .15s, box-shadow .2s;
+  text-decoration:none;display:block;
+}
+.agent-card:hover{border-color:#58a6ff;transform:translateY(-2px);box-shadow:0 6px 20px #58a6ff18}
+.agent-card .badge{
+  font-size:9px;font-weight:700;letter-spacing:.1em;border-radius:4px;
+  padding:2px 8px;margin-bottom:10px;display:inline-block;
+}
+.agent-card h2{font-size:15px;font-weight:700;color:#e6edf3;margin-bottom:4px;letter-spacing:.04em}
+.agent-card .proto{font-size:10px;color:#8b949e;font-family:monospace;margin-bottom:10px;line-height:1.5}
+.agent-card .tag-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.tag{font-size:9px;font-weight:600;letter-spacing:.04em;border-radius:4px;
+  padding:2px 6px;border:1px solid;display:inline-block}
+.agent-card .arrow{font-size:10px;color:#58a6ff;margin-top:10px;display:block;text-align:right}
+
+/* Agent accent colors */
+.c-arma{border-top:2px solid #58a6ff}
+.c-mamo{border-top:2px solid #56d364}
+.c-surf{border-top:2px solid #f78166}
+.c-sail{border-top:2px solid #ffa657}
+.c-zyfai{border-top:2px solid #d2a8ff}
+
+/* ── Score weights ── */
+.weights-row{display:flex;flex-wrap:wrap;gap:10px;padding:0 24px;justify-content:center}
+.weight-pill{
+  display:flex;align-items:center;gap:8px;background:#161b22;
+  border:1px solid #21262d;border-radius:8px;padding:10px 16px;
+}
+.weight-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.weight-label{font-size:11px;font-weight:600;color:#e6edf3}
+.weight-pct{font-size:13px;font-weight:700;font-family:monospace;color:#e6edf3}
+
+/* ── Execution steps ── */
+.steps{display:flex;flex-wrap:wrap;gap:10px;padding:0 24px;justify-content:center}
+.step{
+  background:#161b22;border:1px solid #21262d;border-radius:8px;
+  padding:10px 14px;min-width:200px;flex:1;max-width:280px;
+}
+.step-num{font-size:9px;font-weight:700;letter-spacing:.1em;color:#8b949e;margin-bottom:4px}
+.step-name{font-size:11px;font-weight:700;color:#e6edf3;margin-bottom:3px;font-family:monospace}
+.step-desc{font-size:10px;color:#8b949e;line-height:1.5}
+.step-note{font-size:9px;color:#ffa657;margin-top:4px;font-family:monospace}
+
+/* ── Shared infra grid ── */
+.infra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:14px;padding:0 24px}
+.infra-card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px 16px}
+.infra-card h3{
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:#58a6ff;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #21262d;
+}
+.infra-row{display:flex;gap:8px;margin-bottom:5px;align-items:flex-start}
+.infra-key{font-size:10px;font-weight:600;color:#8b949e;min-width:90px;flex-shrink:0;font-family:monospace}
+.infra-val{font-size:10.5px;color:#e6edf3;font-family:monospace;line-height:1.5}
+.mono-block{
+  font-family:monospace;font-size:10px;color:#a5d6ff;background:#0d1117;
+  border-radius:4px;padding:8px 10px;line-height:1.8;margin-top:6px;
+}
+.chip{
+  display:inline-block;font-size:9px;font-weight:600;letter-spacing:.04em;
+  border-radius:4px;padding:2px 7px;border:1px solid #30363d;color:#79b8ff;
+  margin:2px 3px 2px 0;font-family:monospace;
+}
+.chip.amber{color:#e3b341;border-color:#e3b34144}
+.chip.green{color:#56d364;border-color:#56d36444}
+.chip.orange{color:#ffa657;border-color:#ffa65744}
+.chip.purple{color:#d2a8ff;border-color:#d2a8ff44}
+.chip.red{color:#f78166;border-color:#f7816644}
+
+/* ── Differentiator matrix ── */
+.matrix-wrap{overflow-x:auto;padding:0 24px}
+table.matrix{
+  width:100%;border-collapse:collapse;font-size:11px;
+  min-width:700px;
+}
+table.matrix th{
+  font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:#8b949e;border-bottom:1px solid #30363d;padding:8px 12px;text-align:left;
+  white-space:nowrap;
+}
+table.matrix td{
+  border-bottom:1px solid #21262d;padding:9px 12px;vertical-align:top;
+  font-family:monospace;font-size:10.5px;color:#e6edf3;
+}
+table.matrix tr:last-child td{border-bottom:none}
+table.matrix td:first-child{color:#8b949e;font-weight:600;white-space:nowrap}
+.check{color:#56d364;font-size:13px}
+.cross{color:#30363d;font-size:13px}
+.partial{color:#ffa657;font-size:11px;font-weight:700}
+
+/* ── Database tables section ── */
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+  gap:14px;padding:0 24px}
+.table-card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px 16px}
+.table-card.shared{border-left:3px solid #58a6ff}
+.table-card.per-agent{border-left:3px solid #56d364}
+.table-card.analytics{border-left:3px solid #e3b341}
+.table-card h3{font-size:12px;font-weight:700;color:#e6edf3;font-family:monospace;margin-bottom:4px}
+.table-card .scope{font-size:9px;font-weight:700;letter-spacing:.08em;margin-bottom:8px;display:inline-block}
+.col-row{display:flex;gap:8px;margin-bottom:4px;align-items:baseline}
+.col-name{font-size:10.5px;font-family:monospace;color:#a5d6ff;min-width:160px;flex-shrink:0}
+.col-type{font-size:10px;color:#8b949e;font-family:monospace}
+.col-note{font-size:9.5px;color:#ffa657;margin-top:2px;font-family:monospace}
+
+/* ── Footer ── */
+footer{text-align:center;padding:40px 24px 32px;font-size:10px;color:#484f58;font-family:monospace}
+footer a{color:#58a6ff;text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>Bond.credit — Scoring Framework</h1>
+  <div class="sub">scoringframeworkseason1 · 5 agents · Bond.credit Score F1</div>
+</div>
+<div class="pill"><span class="live"></span><span>GitHub Actions · orchestration.yml · cron 37 0,6,12,18 * * * UTC</span></div>
+
+<!-- ───────────── AGENTS ───────────── -->
+<div class="sec-title">Agents</div>
+<div class="agents">
+
+  <a class="agent-card c-arma" href="arma_pipeline.html">
+    <span class="badge" style="background:#1f3a5f;color:#58a6ff">ARMA</span>
+    <h2>Arma</h2>
+    <div class="proto">arma_scores_raw_daily<br>api.arma.xyz · APR history</div>
+    <div class="tag-row">
+      <span class="tag" style="color:#58a6ff;border-color:#58a6ff44">ingest_arma_apr_history</span>
+      <span class="tag" style="color:#58a6ff;border-color:#58a6ff44">yield_summation</span>
+      <span class="tag" style="color:#e3b341;border-color:#e3b34144">Dune totals</span>
+    </div>
+    <span class="arrow">View pipeline →</span>
+  </a>
+
+  <a class="agent-card c-mamo" href="mamo_pipeline.html">
+    <span class="badge" style="background:#1a3a1f;color:#56d364">MAMO</span>
+    <h2>Mamo</h2>
+    <div class="proto">mamo_scores_raw_daily<br>Yield breakdown · Scattering</div>
+    <div class="tag-row">
+      <span class="tag" style="color:#56d364;border-color:#56d36444">yield_summation</span>
+      <span class="tag" style="color:#e3b341;border-color:#e3b34144">Dune totals</span>
+    </div>
+    <span class="arrow">View pipeline →</span>
+  </a>
+
+  <a class="agent-card c-surf" href="surfliquid_pipeline.html">
+    <span class="badge" style="background:#3a1f1a;color:#f78166">SURFLIQUID</span>
+    <h2>Surfliquid</h2>
+    <div class="proto">surfliquid_scores_raw_daily<br>surfliquid_scores_daily (extra)</div>
+    <div class="tag-row">
+      <span class="tag" style="color:#f78166;border-color:#f7816644">yield_summation</span>
+      <span class="tag" style="color:#e3b341;border-color:#e3b34144">Dune totals</span>
+    </div>
+    <span class="arrow">View pipeline →</span>
+  </a>
+
+  <a class="agent-card c-sail" href="sail_pipeline.html">
+    <span class="badge" style="background:#3a2a0f;color:#ffa657">SAIL</span>
+    <h2>Sail</h2>
+    <div class="proto">sail_scores_raw_daily<br>Sail-specific Dune queries</div>
+    <div class="tag-row">
+      <span class="tag" style="color:#ffa657;border-color:#ffa65744">ingest_sail_dune</span>
+      <span class="tag" style="color:#ffa657;border-color:#ffa65744">Snapshot · sail_dune_data</span>
+    </div>
+    <span class="arrow">View pipeline →</span>
+  </a>
+
+  <a class="agent-card c-zyfai" href="zyfai_pipeline.html">
+    <span class="badge" style="background:#2a1a3a;color:#d2a8ff">ZYFAI</span>
+    <h2>Zyfai</h2>
+    <div class="proto">zyfai_scores_raw_daily<br>CoinGecko · rZFI price</div>
+    <div class="tag-row">
+      <span class="tag" style="color:#d2a8ff;border-color:#d2a8ff44">zyfai_reward_price_fetch</span>
+      <span class="tag" style="color:#d2a8ff;border-color:#d2a8ff44">CoinGecko API</span>
+    </div>
+    <span class="arrow">View pipeline →</span>
+  </a>
+
+</div>
+
+<!-- ───────────── SCORE WEIGHTS ───────────── -->
+<div class="sec-title" style="margin-top:36px">Bond Score Weights · all agents</div>
+<div class="weights-row">
+  <div class="weight-pill">
+    <div class="weight-dot" style="background:#f78166"></div>
+    <span class="weight-label">Performance</span>
+    <span class="weight-pct" style="color:#f78166">30%</span>
+  </div>
+  <div class="weight-pill">
+    <div class="weight-dot" style="background:#ffa657"></div>
+    <span class="weight-label">Risk</span>
+    <span class="weight-pct" style="color:#ffa657">25%</span>
+  </div>
+  <div class="weight-pill">
+    <div class="weight-dot" style="background:#56d364"></div>
+    <span class="weight-label">Stability</span>
+    <span class="weight-pct" style="color:#56d364">20%</span>
+  </div>
+  <div class="weight-pill">
+    <div class="weight-dot" style="background:#d2a8ff"></div>
+    <span class="weight-label">Sentiment</span>
+    <span class="weight-pct" style="color:#d2a8ff">15%</span>
+  </div>
+  <div class="weight-pill">
+    <div class="weight-dot" style="background:#79c0ff"></div>
+    <span class="weight-label">Technical</span>
+    <span class="weight-pct" style="color:#79c0ff">10%</span>
+  </div>
+</div>
+
+<!-- ───────────── EXECUTION ORDER ───────────── -->
+<div class="sec-title">Execution Order · run_update_and_scores.py</div>
+<div class="steps">
+  <div class="step">
+    <div class="step-num">STEP 1</div>
+    <div class="step-name">yield_summation.py + db_update.py</div>
+    <div class="step-desc">Debank storage-first workflow. Downloads yield_breakdown.json from Supabase Storage incoming/, archives to processed/YYYY-MM-DD/.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEPS 2 · 3</div>
+    <div class="step-name">ingest_scattering.py</div>
+    <div class="step-desc">Scattering Protocol API → scattering_ingest table. Primary series for compute_scores.py.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEP 4</div>
+    <div class="step-name">ingest_ethos.py</div>
+    <div class="step-desc">Ethos Network API → ethos_ingest table. Sentiment scoring source.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEP 4 (cont.)</div>
+    <div class="step-name">ingest_scattering_engagement.py</div>
+    <div class="step-desc">Scattering Engagement API → scattering_engagement_ingest.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEP 5</div>
+    <div class="step-name">ingest_agent_totals_dune.py</div>
+    <div class="step-desc">Dune Analytics — per-agent vol/tx queries + protocols query 6913609. Storage-first → dune/incoming/. Analytics only; not read by compute_scores.py.</div>
+    <div class="step-note">⚠ agent_totals_dune_ingest not read by compute_scores.py</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEP 6</div>
+    <div class="step-name">compute_scores.py</div>
+    <div class="step-desc">Reads scattering_ingest → writes {agent}_scores_raw_daily → agents_scores_upscaled. Non-blocking per agent; 4 retries, 3s backoff.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">STEP 7</div>
+    <div class="step-name">bond_score_daily</div>
+    <div class="step-desc">Aggregated final scores table. Written by upsert_bond_score(). ON CONFLICT (agent_name, as_of_date) DO UPDATE.</div>
+  </div>
+</div>
+
+<!-- post-run -->
+<div style="display:flex;gap:10px;padding:10px 24px 0;justify-content:center;flex-wrap:wrap">
+  <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:8px 14px;font-size:10px;font-family:monospace;color:#8b949e">
+    <span style="color:#56d364;font-weight:700">POST-RUN</span>  archive logs → Supabase Storage logs/
+  </div>
+  <div style="background:#1a0e1a;border:1px solid #a855f744;border-radius:8px;padding:8px 14px;font-size:10px;font-family:monospace;color:#c084fc">
+    <span style="font-weight:700">ALWAYS</span>  notify_telegram_alerts.py · bad signals only
+  </div>
+</div>
+
+<!-- ───────────── SHARED INFRASTRUCTURE ───────────── -->
+<div class="sec-title">Shared Infrastructure</div>
+<div class="infra-grid">
+
+  <div class="infra-card">
+    <h3>Orchestration</h3>
+    <div class="infra-row">
+      <span class="infra-key">file</span>
+      <span class="infra-val">.github/workflows/orchestration.yml</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">runner</span>
+      <span class="infra-val">ubuntu-latest</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">cron</span>
+      <span class="infra-val">37 0,6,12,18 * * * UTC</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">entrypoint</span>
+      <span class="infra-val">run_update_and_scores.py</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">retry</span>
+      <span class="infra-val">4 attempts · 3s backoff</span>
+    </div>
+  </div>
+
+  <div class="infra-card">
+    <h3>Shared Scripts</h3>
+    <div class="mono-block">yield_summation.py + db_update.py
+ingest_scattering.py
+ingest_scattering_engagement.py
+ingest_ethos.py
+ingest_agent_totals_dune.py
+compute_scores.py</div>
+    <div style="margin-top:8px">
+      <span class="chip orange">arma · mamo · surf</span>
+      <span class="chip" style="font-size:9px;color:#8b949e;border-color:#30363d">sail/zyfai use variant scripts</span>
+    </div>
+  </div>
+
+  <div class="infra-card">
+    <h3>Shared Static Inputs</h3>
+    <div class="infra-row">
+      <span class="infra-key">lindy</span>
+      <span class="infra-val">lindy_start_dates.json</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">yield</span>
+      <span class="infra-val">yield_breakdown.json<br><span style="color:#8b949e">Supabase Storage incoming/ → processed/</span></span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">manual</span>
+      <span class="infra-val">Tech Research Data</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">audit</span>
+      <span class="infra-val">Audit / Scan Tools</span>
+    </div>
+  </div>
+
+  <div class="infra-card">
+    <h3>Shared External APIs</h3>
+    <div class="infra-row">
+      <span class="infra-key">Scattering</span>
+      <span class="infra-val">Protocol API + Engagement API</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">Ethos</span>
+      <span class="infra-val">Ethos Network API</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">Dune</span>
+      <span class="infra-val">Analytics API · vol/tx per agent + protocols query 6913609</span>
+    </div>
+    <div style="margin-top:6px">
+      <span class="chip amber">PROTOCOL_ALIASES: giza → arma</span>
+    </div>
+  </div>
+
+  <div class="infra-card">
+    <h3>Shared Output Tables</h3>
+    <div class="infra-row">
+      <span class="infra-key">upscaled</span>
+      <span class="infra-val">agents_scores_upscaled</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">bond</span>
+      <span class="infra-val">bond_score_daily</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">conflict</span>
+      <span class="infra-val">ON CONFLICT (agent_name, as_of_date) DO UPDATE</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">access</span>
+      <span class="infra-val"><span class="chip green">read_public</span></span>
+    </div>
+  </div>
+
+  <div class="infra-card">
+    <h3>Dune Analytics · agent_totals_dune_ingest</h3>
+    <div class="infra-row">
+      <span class="infra-key">storage</span>
+      <span class="infra-val">dune/incoming/ → DB insert</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">vol/tx</span>
+      <span class="infra-val">mamo 6546340 · arma 6535988<br>sail 6546660 · surf 6546878 · zyfai 6546766</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">protocols</span>
+      <span class="infra-val">6913609 (QUERY_PROTOCOLS_PER_AGENT)</span>
+    </div>
+    <div class="infra-row">
+      <span class="infra-key">columns</span>
+      <span class="infra-val">protocols jsonb · protocols_query_id integer DEFAULT 6913609</span>
+    </div>
+    <div style="margin-top:6px">
+      <span class="chip" style="color:#ffa657;border-color:#ffa65744;font-size:9px">⚠ analytics only · not read by compute_scores.py</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ───────────── AGENT DIFFERENTIATORS ───────────── -->
+<div class="sec-title">Agent Differentiators</div>
+<div class="matrix-wrap">
+<table class="matrix">
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th style="color:#58a6ff">ARMA</th>
+      <th style="color:#56d364">MAMO</th>
+      <th style="color:#f78166">SURFLIQUID</th>
+      <th style="color:#ffa657">SAIL</th>
+      <th style="color:#d2a8ff">ZYFAI</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>yield_summation.py</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓</span></td>
+    </tr>
+    <tr>
+      <td>ingest_scattering.py</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+    </tr>
+    <tr>
+      <td>ingest_ethos.py</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+    </tr>
+    <tr>
+      <td>ingest_agent_totals_dune.py</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+    <tr>
+      <td>ingest_arma_apr_history.py</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+    <tr>
+      <td>ingest_sail_dune.py (standalone)</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+    <tr>
+      <td>zyfai_reward_price_fetch.py</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓</span></td>
+    </tr>
+    <tr>
+      <td>CoinGecko API (rZFI price)</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓</span></td>
+    </tr>
+    <tr>
+      <td>Snapshot governance data</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+    <tr>
+      <td>Extra daily scores table</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="partial">surfliquid_scores_daily</span></td>
+      <td><span class="partial">sail_scores_daily</span></td>
+      <td><span class="partial">zyfai_scores_daily</span></td>
+    </tr>
+    <tr>
+      <td>Sail-specific Dune queries</td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="check">✓ sail_dune_data</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+    <tr>
+      <td>api.arma.xyz source</td>
+      <td><span class="check">✓</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+      <td><span class="cross">—</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ───────────── DATABASE TABLES ───────────── -->
+<div class="sec-title">Database Tables</div>
+<div class="tables-grid">
+
+  <div class="table-card shared">
+    <h3>agents_scores_upscaled</h3>
+    <span class="scope" style="color:#58a6ff;background:#1f3a5f22;padding:2px 7px;border-radius:4px;border:1px solid #58a6ff44">SHARED · read_public</span>
+    <div class="col-row"><span class="col-name">agent_name</span><span class="col-type">text</span></div>
+    <div class="col-row"><span class="col-name">as_of_date</span><span class="col-type">date</span></div>
+    <div class="col-row"><span class="col-name">performance_score</span><span class="col-type">numeric</span></div>
+    <div class="col-row"><span class="col-name">risk_score</span><span class="col-type">numeric</span></div>
+    <div class="col-row"><span class="col-name">stability_score</span><span class="col-type">numeric</span></div>
+    <div class="col-row"><span class="col-name">sentiment_score</span><span class="col-type">numeric</span></div>
+    <div class="col-row"><span class="col-name">technical_score</span><span class="col-type">numeric</span></div>
+  </div>
+
+  <div class="table-card shared">
+    <h3>bond_score_daily</h3>
+    <span class="scope" style="color:#58a6ff;background:#1f3a5f22;padding:2px 7px;border-radius:4px;border:1px solid #58a6ff44">SHARED · read_public · FINAL OUTPUT</span>
+    <div class="col-row"><span class="col-name">agent_name</span><span class="col-type">text</span></div>
+    <div class="col-row"><span class="col-name">as_of_date</span><span class="col-type">date</span></div>
+    <div class="col-row"><span class="col-name">bond_score</span><span class="col-type">numeric</span></div>
+    <div class="col-note">ON CONFLICT (agent_name, as_of_date) DO UPDATE</div>
+    <div class="col-note">Written by upsert_bond_score()</div>
+  </div>
+
+  <div class="table-card per-agent">
+    <h3>{agent}_scores_raw_daily</h3>
+    <span class="scope" style="color:#56d364;background:#1a3a1f22;padding:2px 7px;border-radius:4px;border:1px solid #56d36444">PER-AGENT · 5 tables</span>
+    <div class="col-row"><span class="col-name">arma_scores_raw_daily</span><span class="col-type"></span></div>
+    <div class="col-row"><span class="col-name">mamo_scores_raw_daily</span><span class="col-type"></span></div>
+    <div class="col-row"><span class="col-name">surfliquid_scores_raw_daily</span><span class="col-type"></span></div>
+    <div class="col-row"><span class="col-name">sail_scores_raw_daily</span><span class="col-type"></span></div>
+    <div class="col-row"><span class="col-name">zyfai_scores_raw_daily</span><span class="col-type"></span></div>
+    <div class="col-note">Written by compute_scores.py · read from scattering_ingest</div>
+  </div>
+
+  <div class="table-card analytics">
+    <h3>agent_totals_dune_ingest</h3>
+    <span class="scope" style="color:#e3b341;background:#1c130522;padding:2px 7px;border-radius:4px;border:1px solid #e3b34144">ANALYTICS · backend_only</span>
+    <div class="col-row"><span class="col-name">agent_name</span><span class="col-type">text</span></div>
+    <div class="col-row"><span class="col-name">as_of_date</span><span class="col-type">date</span></div>
+    <div class="col-row"><span class="col-name">volume_usd</span><span class="col-type">numeric</span></div>
+    <div class="col-row"><span class="col-name">tx_count</span><span class="col-type">integer</span></div>
+    <div class="col-row"><span class="col-name">protocols</span><span class="col-type">jsonb</span></div>
+    <div class="col-row"><span class="col-name">protocols_query_id</span><span class="col-type">integer DEFAULT 6913609</span></div>
+    <div class="col-note">⚠ not read by compute_scores.py · monitoring only</div>
+  </div>
+
+  <div class="table-card analytics">
+    <h3>sail_dune_data</h3>
+    <span class="scope" style="color:#ffa657;background:#3a2a0f22;padding:2px 7px;border-radius:4px;border:1px solid #ffa65744">SAIL-ONLY · standalone</span>
+    <div class="col-note" style="color:#8b949e;font-size:10.5px;margin-top:4px">Written by ingest_sail_dune.py (standalone script, not in orchestration). Sail-specific Dune query IDs.</div>
+  </div>
+
+  <div class="table-card per-agent">
+    <h3>scattering_ingest</h3>
+    <span class="scope" style="color:#56d364;background:#1a3a1f22;padding:2px 7px;border-radius:4px;border:1px solid #56d36444">PRIMARY SERIES · compute_scores source</span>
+    <div class="col-note" style="color:#8b949e;font-size:10.5px;margin-top:4px">Written by ingest_scattering.py. Primary input to compute_scores.py for all 5 agents. All scoring logic reads this table — not Dune totals.</div>
+  </div>
+
+</div>
+
+<footer>
+  Bond.credit Scoring Framework · Season 1 &nbsp;·&nbsp;
+  <a href="arma_pipeline.html">Arma</a> &nbsp;·&nbsp;
+  <a href="mamo_pipeline.html">Mamo</a> &nbsp;·&nbsp;
+  <a href="surfliquid_pipeline.html">Surfliquid</a> &nbsp;·&nbsp;
+  <a href="sail_pipeline.html">Sail</a> &nbsp;·&nbsp;
+  <a href="zyfai_pipeline.html">Zyfai</a>
+</footer>
+
+</body>
+</html>
