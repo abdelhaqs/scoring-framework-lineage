@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SAIL — Interactive Scoring Pipeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;font-family:'Segoe UI',system-ui,sans-serif;color:#e6edf3;overflow-x:hidden}
+.hdr{text-align:center;padding:22px 16px 6px}
+.hdr h1{font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#e6edf3}
+.hdr .sub{font-size:11px;color:#58a6ff;font-family:monospace;margin-top:4px}
+.pill{display:flex;align-items:center;justify-content:center;gap:8px;width:fit-content;
+  margin:12px auto 16px;border:1px solid #1f6feb44;background:#161b22;border-radius:999px;
+  padding:5px 18px;font-size:11px;color:#79b8ff}
+.live{width:7px;height:7px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950;
+  animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.filters{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 16px 16px}
+.filters button{border:1px solid;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:600;
+  cursor:pointer;background:transparent;transition:all .2s;letter-spacing:.04em}
+.filters button:hover{filter:brightness(1.25)}
+.filters button.active{color:#0d1117!important}
+.btn-perf{color:#f78166;border-color:#f78166}.btn-perf.active{background:#f78166}
+.btn-risk{color:#ffa657;border-color:#ffa657}.btn-risk.active{background:#ffa657}
+.btn-stab{color:#56d364;border-color:#56d364}.btn-stab.active{background:#56d364}
+.btn-tech{color:#79c0ff;border-color:#79c0ff}.btn-tech.active{background:#79c0ff}
+.btn-sent{color:#d2a8ff;border-color:#d2a8ff}.btn-sent.active{background:#d2a8ff}
+.btn-reset{color:#e6edf3;border-color:#30363d}.btn-reset:hover{border-color:#e6edf3}
+.canvas-wrap{overflow-x:auto;padding:0 8px 8px}
+svg{display:block;margin:0 auto}
+.node{cursor:pointer;transition:opacity .2s}
+.node rect,.node path{transition:filter .2s,stroke .2s}
+.node:hover rect:first-child{filter:brightness(1.3)}
+svg.has-focus .node{opacity:.18}
+svg.has-focus .node.focused{opacity:1}
+svg.has-focus .node.connected{opacity:.85}
+svg.has-focus .edge{opacity:.08}
+svg.has-focus .edge.focused-edge{opacity:1}
+.edge-animated{stroke-dasharray:8 5;animation:flow 1.2s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-13}}
+#panel{position:fixed;top:0;right:-420px;width:400px;height:100vh;
+  background:#161b22;border-left:1px solid #30363d;overflow-y:auto;
+  transition:right .3s cubic-bezier(.4,0,.2,1);z-index:100;padding:0}
+#panel.open{right:0}
+#panel-header{padding:18px 20px 14px;border-bottom:1px solid #21262d;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  position:sticky;top:0;background:#161b22;z-index:1}
+#panel-badge{font-size:9px;font-weight:700;letter-spacing:.1em;margin-bottom:4px}
+#panel-title{font-size:16px;font-weight:700;color:#e6edf3;line-height:1.3}
+#panel-close{background:none;border:1px solid #30363d;color:#8b949e;cursor:pointer;
+  border-radius:6px;padding:4px 8px;font-size:14px;flex-shrink:0;margin-top:2px}
+#panel-close:hover{border-color:#e6edf3;color:#e6edf3}
+#panel-body{padding:16px 20px 32px}
+.p-section{margin-bottom:18px}
+.p-section h3{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:#58a6ff;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #21262d}
+.p-row{display:flex;gap:8px;margin-bottom:5px;align-items:flex-start}
+.p-key{font-size:10px;font-weight:600;color:#8b949e;min-width:80px;flex-shrink:0;padding-top:1px;font-family:monospace}
+.p-val{font-size:11px;color:#e6edf3;font-family:monospace;line-height:1.5}
+.p-note{font-size:11px;color:#8b949e;line-height:1.6;margin-top:4px}
+.p-mono{font-family:monospace;font-size:10.5px;color:#a5d6ff;background:#0d1117;
+  border-radius:4px;padding:8px 10px;margin-top:6px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+#tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;border-radius:6px;
+  padding:7px 12px;font-size:11px;color:#e6edf3;pointer-events:none;z-index:200;
+  opacity:0;transition:opacity .15s;max-width:260px;line-height:1.5}
+#tooltip.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>Bond.credit — SAIL Scoring Pipeline</h1>
+  <div class="sub">sail_scores_raw_daily · scoringframeworkseason1 · Bond.credit score F1</div>
+</div>
+<div class="pill"><span class="live"></span><span>GitHub Actions · orchestration.yml · cron 37 0,6,12,18 * * * UTC</span></div>
+
+<div class="filters">
+  <span style="font-size:11px;color:#8b949e;line-height:30px;margin-right:4px">Highlight path:</span>
+  <button class="btn-perf" data-cat="perf">Performance</button>
+  <button class="btn-risk" data-cat="risk">Risk</button>
+  <button class="btn-stab" data-cat="stab">Stability</button>
+  <button class="btn-tech" data-cat="tech">Technical</button>
+  <button class="btn-sent" data-cat="sent">Sentiment</button>
+  <button class="btn-reset" id="btn-reset">Clear</button>
+</div>
+
+<div class="canvas-wrap">
+<svg id="dag" viewBox="0 0 1570 900" xmlns="http://www.w3.org/2000/svg"
+  style="width:100%;max-width:1570px;min-width:1100px">
+<defs>
+  <marker id="ag"  markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#30363d"/></marker>
+  <marker id="ab"  markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#1f6feb"/></marker>
+  <marker id="ac"  markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#1c7ed6"/></marker>
+  <marker id="ap"  markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#8957e5"/></marker>
+  <marker id="agr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#2ea043"/></marker>
+  <marker id="aam" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#d29922"/></marker>
+  <marker id="aor" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0L0,6L7,3z" fill="#f0883e"/></marker>
+  <filter id="fg" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+    <feColorMatrix in="b" type="matrix" values="0 0 0 0 .54 0 0 0 0 .21 0 0 0 0 .90 0 0 0 .55 0" result="col"/>
+    <feMerge><feMergeNode in="col"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<!-- Column labels -->
+<text x="98"   y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">SOURCES</text>
+<text x="308"  y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">INGEST SCRIPTS</text>
+<text x="548"  y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">INGEST TABLES</text>
+<text x="802"  y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">COMPUTE SCRIPT</text>
+<text x="1052" y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">TARGET TABLE</text>
+<text x="1290" y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">SCORED OUTPUT</text>
+<text x="1490" y="16" text-anchor="middle" font-size="9" fill="#ffffff" font-weight="700" letter-spacing="1.2" opacity=".5">PUBLIC</text>
+
+<line x1="196" y1="20" x2="196" y2="890" stroke="#21262d" stroke-width="1.2"/>
+<line x1="420" y1="20" x2="420" y2="890" stroke="#21262d" stroke-width="1.2"/>
+<line x1="656" y1="20" x2="656" y2="890" stroke="#21262d" stroke-width="1.2"/>
+<line x1="920" y1="20" x2="920" y2="890" stroke="#21262d" stroke-width="1.2"/>
+<line x1="1152" y1="20" x2="1152" y2="890" stroke="#21262d" stroke-width="1.2"/>
+<line x1="1380" y1="20" x2="1380" y2="890" stroke="#21262d" stroke-width="1.2"/>
+
+<!-- GHA wrapper -->
+<rect x="6" y="22" width="1558" height="24" rx="4" fill="#0d1117" stroke="#1f6feb" stroke-width=".8" stroke-dasharray="6,4" opacity=".5"/>
+<text x="784" y="38" text-anchor="middle" font-size="8.5" fill="#1f6feb" font-weight="700" letter-spacing="1">GITHUB ACTIONS · orchestration.yml · run_update_and_scores.py</text>
+
+<!-- PRE-STEP ROW -->
+<g class="node" id="n-scraper-wf" data-type="pre">
+  <rect x="8" y="52" width="178" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="16" y="68" font-size="8" fill="#58a6ff" font-weight="700">PRIOR WORKFLOW</text>
+  <text x="16" y="82" font-size="10.5" fill="#ffffff" font-weight="600">debank_scraper.yml</text>
+  <text x="16" y="93" font-size="8" fill="#58a6ff">cron 17 0,6,12,18 * * *</text>
+</g>
+<g class="node" id="n-debank-script" data-type="pre">
+  <rect x="218" y="52" width="192" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="226" y="68" font-size="8" fill="#58a6ff" font-weight="700">SCRAPER SCRIPT</text>
+  <text x="226" y="82" font-size="10.5" fill="#ffffff" font-weight="600">debank_playwright.py</text>
+  <text x="226" y="93" font-size="8" fill="#58a6ff">Scrapes DeBank UI via Playwright</text>
+</g>
+<g class="node" id="n-storage" data-type="pre">
+  <rect x="432" y="52" width="214" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="440" y="68" font-size="8" fill="#58a6ff" font-weight="700">SUPABASE STORAGE · bucket incoming/</text>
+  <text x="440" y="82" font-size="10.5" fill="#ffffff" font-weight="600">yield_breakdown.json</text>
+  <text x="440" y="93" font-size="8" fill="#58a6ff">Max age 180 min guard</text>
+</g>
+<g class="node" id="n-guard" data-type="pre">
+  <rect x="668" y="52" width="214" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+  <text x="676" y="68" font-size="8" fill="#58a6ff" font-weight="700">GHA GUARD STEP</text>
+  <text x="676" y="82" font-size="10.5" fill="#ffffff" font-weight="600">Freshness Check</text>
+  <text x="676" y="93" font-size="8" fill="#58a6ff">Aborts if file &gt; 180 min old</text>
+</g>
+<line class="edge" data-from="n-scraper-wf" data-to="n-debank-script" x1="186" y1="74" x2="216" y2="74" stroke="#30363d" stroke-width="1.3" marker-end="url(#ag)"/>
+<line class="edge" data-from="n-debank-script" data-to="n-storage" x1="410" y1="74" x2="430" y2="74" stroke="#30363d" stroke-width="1.3" marker-end="url(#ag)"/>
+<line class="edge" data-from="n-storage" data-to="n-guard" x1="646" y1="74" x2="666" y2="74" stroke="#30363d" stroke-width="1.3" marker-end="url(#ag)"/>
+
+<!-- SOURCE NODES Col 1 (main pipeline) -->
+<g class="node" id="n-yield-file" data-type="source">
+  <rect x="8" y="108" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb"/>
+  <text x="16" y="123" font-size="8" fill="#58a6ff" font-weight="700">STORAGE → FILE</text>
+  <text x="16" y="137" font-size="10.5" fill="#ffffff" font-weight="600">yield_breakdown.json</text>
+  <text x="16" y="151" font-size="8.5" fill="#79b8ff">Downloaded from Supabase Storage</text>
+</g>
+<g class="node" id="n-scatter-api" data-type="source">
+  <rect x="8" y="170" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb"/>
+  <text x="16" y="185" font-size="8" fill="#58a6ff" font-weight="700">EXTERNAL API</text>
+  <text x="16" y="199" font-size="10.5" fill="#ffffff" font-weight="600">Scattering Protocol</text>
+  <text x="16" y="213" font-size="8.5" fill="#79b8ff">AUM · deposits · withdrawals</text>
+</g>
+<g class="node" id="n-engage-api" data-type="source">
+  <rect x="8" y="232" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb"/>
+  <text x="16" y="247" font-size="8" fill="#58a6ff" font-weight="700">EXTERNAL API</text>
+  <text x="16" y="261" font-size="10.5" fill="#ffffff" font-weight="600">Scattering Engagement</text>
+  <text x="16" y="275" font-size="8.5" fill="#79b8ff">unique_users · interactions</text>
+</g>
+<g class="node" id="n-ethos-api" data-type="source">
+  <rect x="8" y="294" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb"/>
+  <text x="16" y="309" font-size="8" fill="#58a6ff" font-weight="700">EXTERNAL API</text>
+  <text x="16" y="323" font-size="10.5" fill="#ffffff" font-weight="600">Ethos Network</text>
+  <text x="16" y="337" font-size="8.5" fill="#79b8ff">ethos_score_normalized</text>
+</g>
+<g class="node" id="n-tech-research" data-type="source">
+  <rect x="8" y="356" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb" stroke-dasharray="5,3"/>
+  <text x="16" y="371" font-size="8" fill="#58a6ff" font-weight="700">MANUAL / RESEARCH</text>
+  <text x="16" y="385" font-size="10.5" fill="#ffffff" font-weight="600">Tech Research Data</text>
+  <text x="16" y="399" font-size="8.5" fill="#79b8ff">verification · eng_quality scores</text>
+</g>
+<g class="node" id="n-security" data-type="source">
+  <rect x="8" y="418" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb" stroke-dasharray="5,3"/>
+  <text x="16" y="433" font-size="8" fill="#58a6ff" font-weight="700">SECURITY SCANNER</text>
+  <text x="16" y="447" font-size="10.5" fill="#ffffff" font-weight="600">Audit / Scan Tools</text>
+  <text x="16" y="461" font-size="8.5" fill="#79b8ff">vulnerabilities · security_score</text>
+</g>
+<g class="node" id="n-lindy-config" data-type="source">
+  <rect x="8" y="480" width="178" height="52" rx="6" fill="#0e1b2e" stroke="#1f6feb" stroke-dasharray="5,3"/>
+  <text x="16" y="495" font-size="8" fill="#58a6ff" font-weight="700">STATIC CONFIG FILE</text>
+  <text x="16" y="509" font-size="10.5" fill="#ffffff" font-weight="600">lindy_start_dates.json</text>
+  <text x="16" y="523" font-size="8.5" fill="#79b8ff">Sail start: 2024-07-18</text>
+</g>
+
+<!-- DUNE SECTION — standalone, separate from main orchestration -->
+<!-- Dune boundary box -->
+<rect x="4" y="548" width="644" height="106" rx="8" fill="#0d1117" stroke="#f0883e" stroke-width="1" stroke-dasharray="7,4" opacity=".7"/>
+<text x="326" y="562" text-anchor="middle" font-size="8.5" fill="#f0883e" font-weight="700" letter-spacing=".8">STANDALONE DUNE INGEST  ·  ingest_sail_dune.py  ·  NOT in main orchestration</text>
+
+<g class="node" id="n-dune-api" data-type="source">
+  <rect x="8" y="570" width="178" height="76" rx="6" fill="#1e1208" stroke="#f0883e"/>
+  <text x="16" y="585" font-size="8" fill="#f0883e" font-weight="700">DUNE ANALYTICS API</text>
+  <text x="16" y="599" font-size="10.5" fill="#ffffff" font-weight="600">Sail AUM + TX Queries</text>
+  <text x="16" y="612" font-size="8.5" fill="#e3995a">AUM query: 6501329</text>
+  <text x="16" y="624" font-size="8.5" fill="#e3995a">TX query: 6501022</text>
+  <text x="16" y="636" font-size="8" fill="#8a5020">total_aum_usd · deposits · withdrawals</text>
+</g>
+
+<g class="node" id="n-sc-dune" data-type="script">
+  <rect x="218" y="570" width="192" height="76" rx="6" fill="#1e1208" stroke="#c76d28"/>
+  <text x="226" y="585" font-size="8" fill="#f0883e" font-weight="700">STANDALONE SCRIPT</text>
+  <text x="226" y="599" font-size="10.5" fill="#ffffff" font-weight="600">ingest_sail_dune.py</text>
+  <text x="226" y="612" font-size="8.5" fill="#e3995a">_ensure_tables() → DuneClient</text>
+  <text x="226" y="624" font-size="8.5" fill="#e3995a">Merges AUM + TX by day key</text>
+  <text x="226" y="636" font-size="8" fill="#8a5020">ON CONFLICT (agent_name, day) DO NOTHING</text>
+</g>
+
+<g class="node" id="n-t-sail-dune" data-type="table">
+  <rect x="432" y="570" width="214" height="76" rx="6" fill="#1e1208" stroke="#c76d28"/>
+  <text x="440" y="585" font-size="8" fill="#f0883e" font-weight="700">SUPPLEMENTARY TABLE · backend_only</text>
+  <text x="440" y="599" font-size="10.5" fill="#ffffff" font-weight="600">sail_dune_data</text>
+  <text x="440" y="612" font-size="8.5" fill="#e3995a">aum_usd · deposits_usd · withdrawals_usd</text>
+  <text x="440" y="624" font-size="8.5" fill="#e3995a">UNIQUE (agent_name, day)</text>
+  <text x="440" y="636" font-size="8" fill="#8a5020">⚠ compute_scores reads scattering_ingest</text>
+</g>
+
+<line class="edge" data-from="n-dune-api" data-to="n-sc-dune" x1="186" y1="608" x2="216" y2="608" stroke="#c76d28" stroke-width="1.4" marker-end="url(#aor)"/>
+<line class="edge" data-from="n-sc-dune" data-to="n-t-sail-dune" x1="410" y1="608" x2="430" y2="608" stroke="#c76d28" stroke-width="1.4" marker-end="url(#aor)"/>
+
+<!-- INGEST SCRIPTS Col 2 (main) -->
+<g class="node" id="n-sc-yield" data-type="script">
+  <rect x="218" y="102" width="192" height="76" rx="6" fill="#0c1d38" stroke="#2d6db5"/>
+  <text x="226" y="117" font-size="8" fill="#79b8ff" font-weight="700">STEP 3 · Python</text>
+  <text x="226" y="131" font-size="10.5" fill="#ffffff" font-weight="600">yield_summation.py</text>
+  <text x="226" y="144" font-size="8.5" fill="#79b8ff">Parses yield_breakdown.json</text>
+  <text x="226" y="157" font-size="8" fill="#5c8fd6" font-weight="700">STEP 4 · Python</text>
+  <text x="226" y="170" font-size="10.5" fill="#ffffff" font-weight="600">db_update.py</text>
+</g>
+<g class="node" id="n-sc-scatter" data-type="script">
+  <rect x="218" y="188" width="192" height="52" rx="6" fill="#0c1d38" stroke="#2d6db5"/>
+  <text x="226" y="203" font-size="8" fill="#79b8ff" font-weight="700">STEP 4 (cont.) · Python</text>
+  <text x="226" y="217" font-size="10.5" fill="#ffffff" font-weight="600">ingest_scattering.py</text>
+  <text x="226" y="231" font-size="8.5" fill="#79b8ff">via db_update · UPSERT daily rows</text>
+</g>
+<g class="node" id="n-sc-engage" data-type="script">
+  <rect x="218" y="250" width="192" height="52" rx="6" fill="#0c1d38" stroke="#2d6db5"/>
+  <text x="226" y="265" font-size="8" fill="#79b8ff" font-weight="700">STEP 5 · Python</text>
+  <text x="226" y="279" font-size="10.5" fill="#ffffff" font-weight="600">ingest_scattering_engagement.py</text>
+  <text x="226" y="293" font-size="8.5" fill="#79b8ff">load_engagement() → UPSERT</text>
+</g>
+<g class="node" id="n-sc-ethos" data-type="script">
+  <rect x="218" y="312" width="192" height="52" rx="6" fill="#0c1d38" stroke="#2d6db5"/>
+  <text x="226" y="327" font-size="8" fill="#79b8ff" font-weight="700">STEP 6 · Python  (non-blocking)</text>
+  <text x="226" y="341" font-size="10.5" fill="#ffffff" font-weight="600">ingest_ethos.py</text>
+  <text x="226" y="355" font-size="8.5" fill="#79b8ff">ethos_identity_map.json → UPSERT</text>
+</g>
+<g class="node" id="n-sc-manual" data-type="script">
+  <rect x="218" y="374" width="192" height="42" rx="6" fill="#0c1d38" stroke="#2d6db5" stroke-dasharray="5,3"/>
+  <text x="226" y="389" font-size="8" fill="#79b8ff" font-weight="700">MANUAL ENTRY</text>
+  <text x="226" y="405" font-size="10.5" fill="#ffffff" font-weight="600">Direct DB insert</text>
+</g>
+<g class="node" id="n-sc-scan" data-type="script">
+  <rect x="218" y="426" width="192" height="42" rx="6" fill="#0c1d38" stroke="#2d6db5" stroke-dasharray="5,3"/>
+  <text x="226" y="441" font-size="8" fill="#79b8ff" font-weight="700">SCAN / AUDIT TOOL</text>
+  <text x="226" y="457" font-size="10.5" fill="#ffffff" font-weight="600">Direct DB insert</text>
+</g>
+<g class="node" id="n-sc-lindy" data-type="script">
+  <rect x="218" y="478" width="192" height="42" rx="6" fill="#0d1f14" stroke="#2ea043" stroke-dasharray="5,3"/>
+  <text x="226" y="493" font-size="8" fill="#56d364" font-weight="700">READ AT RUNTIME</text>
+  <text x="226" y="509" font-size="10.5" fill="#ffffff" font-weight="600">load_lindy_start_dates()</text>
+</g>
+
+<!-- Source → Script edges -->
+<line class="edge" data-from="n-yield-file"    data-to="n-sc-yield"   x1="186" y1="134" x2="216" y2="140" stroke="#2d6db5" stroke-width="1.4" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-scatter-api"   data-to="n-sc-scatter" x1="186" y1="196" x2="216" y2="210" stroke="#2d6db5" stroke-width="1.4" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-engage-api"    data-to="n-sc-engage"  x1="186" y1="258" x2="216" y2="272" stroke="#2d6db5" stroke-width="1.4" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-ethos-api"     data-to="n-sc-ethos"   x1="186" y1="320" x2="216" y2="334" stroke="#2d6db5" stroke-width="1.4" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-tech-research" data-to="n-sc-manual"  x1="186" y1="382" x2="216" y2="391" stroke="#2d6db5" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-security"      data-to="n-sc-scan"    x1="186" y1="444" x2="216" y2="447" stroke="#2d6db5" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ab)"/>
+<line class="edge" data-from="n-lindy-config"  data-to="n-sc-lindy"   x1="186" y1="506" x2="216" y2="499" stroke="#2ea043" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#agr)"/>
+
+<!-- INGEST TABLE NODES Col 3 (main) -->
+<g class="node" id="n-t-yshr" data-type="table">
+  <rect x="432" y="102" width="214" height="76" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="117" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="131" font-size="10" fill="#ffffff" font-weight="600">yield_summation_historical_raw</text>
+  <text x="440" y="144" font-size="8.5" fill="#4d9de0">apy_native · total_balance_usd</text>
+  <text x="440" y="156" font-size="8" fill="#2d5c88">syncs → agents_raw (apy_native)</text>
+  <text x="440" y="168" font-size="8" fill="#2d5c88">load_yield() checks agents_raw first</text>
+</g>
+<g class="node" id="n-t-scatter" data-type="table">
+  <rect x="432" y="188" width="214" height="62" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="203" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="217" font-size="10.5" fill="#ffffff" font-weight="600">scattering_ingest</text>
+  <text x="440" y="231" font-size="8.5" fill="#4d9de0">aum_usd · deposits_usd · withdrawals_usd</text>
+  <text x="440" y="243" font-size="8" fill="#2d5c88">Primary series · compute reads this</text>
+</g>
+<g class="node" id="n-t-engage" data-type="table">
+  <rect x="432" y="260" width="214" height="62" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="275" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="289" font-size="10" fill="#ffffff" font-weight="600">scattering_engagement_ingest</text>
+  <text x="440" y="303" font-size="8.5" fill="#4d9de0">engagement_score_0_100 · period</text>
+  <text x="440" y="315" font-size="8" fill="#2d5c88">load_onchain_engagement() · period=7D</text>
+</g>
+<g class="node" id="n-t-ethos" data-type="table">
+  <rect x="432" y="332" width="214" height="52" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="347" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="361" font-size="10.5" fill="#ffffff" font-weight="600">ethos_sentiment_ingest</text>
+  <text x="440" y="375" font-size="8.5" fill="#4d9de0">ethos_score_normalized_0_100</text>
+</g>
+<g class="node" id="n-t-tech" data-type="table">
+  <rect x="432" y="394" width="214" height="52" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="409" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="423" font-size="10.5" fill="#ffffff" font-weight="600">technical_research_ingest</text>
+  <text x="440" y="437" font-size="8.5" fill="#4d9de0">verification_score · eng_quality_score</text>
+</g>
+<g class="node" id="n-t-security" data-type="table">
+  <rect x="432" y="456" width="214" height="52" rx="6" fill="#0a1e35" stroke="#1c5ea8"/>
+  <text x="440" y="471" font-size="8" fill="#4d9de0" font-weight="700">INGEST TABLE · backend_only</text>
+  <text x="440" y="485" font-size="10.5" fill="#ffffff" font-weight="600">technical_security_scans</text>
+  <text x="440" y="499" font-size="8.5" fill="#4d9de0">security_score_0_100 · vulns_total</text>
+</g>
+
+<!-- Script → Table edges -->
+<line class="edge" data-from="n-sc-yield"   data-to="n-t-yshr"    x1="410" y1="138" x2="430" y2="138" stroke="#1c5ea8" stroke-width="1.4" marker-end="url(#ac)"/>
+<line class="edge" data-from="n-sc-scatter" data-to="n-t-scatter"  x1="410" y1="214" x2="430" y2="214" stroke="#1c5ea8" stroke-width="1.4" marker-end="url(#ac)"/>
+<line class="edge" data-from="n-sc-engage"  data-to="n-t-engage"   x1="410" y1="276" x2="430" y2="280" stroke="#1c5ea8" stroke-width="1.4" marker-end="url(#ac)"/>
+<line class="edge" data-from="n-sc-ethos"   data-to="n-t-ethos"    x1="410" y1="338" x2="430" y2="355" stroke="#1c5ea8" stroke-width="1.4" marker-end="url(#ac)"/>
+<line class="edge" data-from="n-sc-manual"  data-to="n-t-tech"     x1="410" y1="395" x2="430" y2="416" stroke="#1c5ea8" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ac)"/>
+<line class="edge" data-from="n-sc-scan"    data-to="n-t-security" x1="410" y1="447" x2="430" y2="476" stroke="#1c5ea8" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ac)"/>
+
+<!-- COMPUTE BOX Col 4 -->
+<g class="node" id="n-compute" data-type="compute">
+  <rect x="665" y="96" width="244" height="504" rx="8" fill="#100d22" stroke="#6e40c9" stroke-width="1.5"/>
+  <text x="787" y="114" text-anchor="middle" font-size="9" fill="#a78bfa" font-weight="700" letter-spacing=".5">STEP 7 · compute_scores.py</text>
+  <line x1="670" y1="120" x2="904" y2="120" stroke="#1e1840" stroke-width="1"/>
+  <text x="674" y="134" font-size="8" fill="#7c3aed" font-weight="700">LOAD FUNCTIONS</text>
+  <text x="674" y="147" font-size="8.5" fill="#c4b5fd">load_series()</text>
+  <text x="760" y="147" font-size="8" fill="#4c3a8c">← scattering_ingest</text>
+  <text x="674" y="159" font-size="8.5" fill="#c4b5fd">load_lindy_start_dates()</text>
+  <text x="760" y="159" font-size="8" fill="#4c3a8c">← lindy_start_dates.json</text>
+  <text x="674" y="171" font-size="8.5" fill="#c4b5fd">load_technical_research()</text>
+  <text x="760" y="171" font-size="8" fill="#4c3a8c">← technical_research_ingest</text>
+  <text x="674" y="183" font-size="8.5" fill="#c4b5fd">load_security()</text>
+  <text x="760" y="183" font-size="8" fill="#4c3a8c">← technical_security_scans</text>
+  <text x="674" y="195" font-size="8.5" fill="#c4b5fd">load_yield()</text>
+  <text x="760" y="195" font-size="8" fill="#4c3a8c">← agents_raw → yshr</text>
+  <text x="674" y="207" font-size="8.5" fill="#c4b5fd">load_onchain_engagement()</text>
+  <text x="760" y="207" font-size="8" fill="#4c3a8c">← scattering_engagement</text>
+  <text x="674" y="219" font-size="8.5" fill="#c4b5fd">load_ethos_sentiment()</text>
+  <text x="760" y="219" font-size="8" fill="#4c3a8c">← ethos_sentiment_ingest</text>
+  <line x1="670" y1="226" x2="904" y2="226" stroke="#1e1840" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="787" y="240" text-anchor="middle" font-size="9" fill="#a78bfa" font-weight="700">compute_scores_for_agent("Sail")</text>
+  <text x="674" y="255" font-size="8" fill="#f78166" font-weight="700">PERF  w=0.30</text>
+  <text x="674" y="267" font-size="8" fill="#8a3a30">ar30=0.178 · sharpe30=0.156 · mom7=0.083</text>
+  <text x="674" y="278" font-size="8" fill="#8a3a30">ce30=0.083 · yield=0.500  →  sigmoid()</text>
+  <text x="674" y="293" font-size="8" fill="#ffa657" font-weight="700">RISK  w=0.25</text>
+  <text x="674" y="305" font-size="8" fill="#8a5c2a">mdd90=0.25 · mdd30=0.15 · vol_ann=0.20</text>
+  <text x="674" y="316" font-size="8" fill="#8a5c2a">ratvl=0.15 · smart_contract=0.25</text>
+  <text x="674" y="331" font-size="8" fill="#56d364" font-weight="700">STABILITY  w=0.20</text>
+  <text x="674" y="343" font-size="8" fill="#2a6b35">lindy=0.40 · tvl_growth=0.25 · flow=0.35</text>
+  <text x="674" y="358" font-size="8" fill="#79c0ff" font-weight="700">TECHNICAL  w=0.10</text>
+  <text x="674" y="370" font-size="8" fill="#2a4e7c">verification=0.267 · vuln=0.267 · eng=0.200</text>
+  <text x="674" y="385" font-size="8" fill="#d2a8ff" font-weight="700">SENTIMENT  w=0.15</text>
+  <text x="674" y="397" font-size="8" fill="#5a3f7c">nis=0.25 · ethos=0.30 · turnover=0.15</text>
+  <text x="674" y="408" font-size="8" fill="#5a3f7c">onchain_engagement=0.30</text>
+  <line x1="670" y1="416" x2="904" y2="416" stroke="#1e1840" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="787" y="430" text-anchor="middle" font-size="9" fill="#a78bfa" font-weight="700">upsert_agent_scores()</text>
+  <text x="674" y="444" font-size="8" fill="#5b51b0">→ sail_scores_raw_daily   (raw values)</text>
+  <text x="674" y="456" font-size="8" fill="#5b51b0">→ sail_scores_daily        (0–100)</text>
+  <text x="674" y="468" font-size="8" fill="#5b51b0">→ bond_score_daily         (composite)</text>
+  <text x="674" y="480" font-size="8" fill="#5b51b0">→ agents_scores_upscaled   (floor=60)</text>
+  <line x1="670" y1="487" x2="904" y2="487" stroke="#1e1840" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="674" y="500" font-size="8" fill="#3730a3">ON CONFLICT (as_of_date) DO UPDATE</text>
+  <text x="674" y="512" font-size="8" fill="#3730a3">renorm() if any metric field is missing</text>
+  <text x="674" y="524" font-size="8" fill="#3730a3">Retry: 4 attempts · 3 s backoff per step</text>
+</g>
+
+<!-- Table → Compute fan-in -->
+<path class="edge" data-from="n-t-yshr"     data-to="n-compute" d="M646,140 C656,140 663,200 663,200" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-t-scatter"  data-to="n-compute" d="M646,218 C656,218 663,240 663,240" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-t-engage"   data-to="n-compute" d="M646,290 C656,290 663,300 663,300" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-t-ethos"    data-to="n-compute" d="M646,358 C656,358 663,350 663,350" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-t-tech"     data-to="n-compute" d="M646,420 C656,420 663,390 663,390" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-t-security" data-to="n-compute" d="M646,482 C656,482 663,420 663,420" stroke="#1c5ea8" stroke-width="1.3" fill="none" marker-end="url(#ac)" opacity=".6"/>
+<path class="edge" data-from="n-sc-lindy"   data-to="n-compute" d="M410,499 C540,499 663,450 663,450" stroke="#2ea043" stroke-width="1.2" fill="none" marker-end="url(#agr)" opacity=".5" stroke-dasharray="4,3"/>
+
+<!-- TARGET TABLE Col 5 -->
+<g class="node" id="n-target" data-type="target">
+  <rect x="930" y="96" width="210" height="458" rx="8" fill="#120930" stroke="#8957e5" stroke-width="2" filter="url(#fg)"/>
+  <text x="1035" y="115" text-anchor="middle" font-size="9" fill="#a78bfa" font-weight="700" letter-spacing=".5">TARGET · backend_only</text>
+  <text x="1035" y="132" text-anchor="middle" font-size="13" fill="#ffffff" font-weight="700">sail_scores_raw_daily</text>
+  <line x1="935" y1="139" x2="1135" y2="139" stroke="#2e1065" stroke-width="1"/>
+  <text x="938" y="153" font-size="8.5" fill="#8957e5">PK  as_of_date    date NOT NULL</text>
+  <text x="938" y="165" font-size="8.5" fill="#6535c8">    computed_at   timestamptz</text>
+  <line x1="935" y1="172" x2="1135" y2="172" stroke="#1e0f40" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="938" y="186" font-size="8" fill="#f78166" font-weight="700">── PERFORMANCE ──</text>
+  <text x="938" y="198" font-size="8.5" fill="#5e2920">perf_annualized_return_30</text>
+  <text x="938" y="210" font-size="8.5" fill="#5e2920">perf_sharpe_30</text>
+  <text x="938" y="222" font-size="8.5" fill="#5e2920">perf_momentum_7</text>
+  <text x="938" y="234" font-size="8.5" fill="#5e2920">perf_capital_efficiency_30</text>
+  <text x="938" y="246" font-size="8.5" fill="#5e2920">perf_yield_apy_native</text>
+  <text x="938" y="261" font-size="8" fill="#ffa657" font-weight="700">── RISK ──</text>
+  <text x="938" y="273" font-size="8.5" fill="#5e3d1a">risk_mdd_90  ·  risk_mdd_30</text>
+  <text x="938" y="285" font-size="8.5" fill="#5e3d1a">risk_vol_ann  ·  risk_ratvl</text>
+  <text x="938" y="297" font-size="8.5" fill="#5e3d1a">risk_smart_contract_score</text>
+  <text x="938" y="312" font-size="8" fill="#56d364" font-weight="700">── STABILITY ──</text>
+  <text x="938" y="324" font-size="8.5" fill="#1a4d24">stab_lindy_days</text>
+  <text x="938" y="336" font-size="8.5" fill="#1a4d24">stab_tvl_growth</text>
+  <text x="938" y="348" font-size="8.5" fill="#1a4d24">stab_flow_stability</text>
+  <text x="938" y="363" font-size="8" fill="#79c0ff" font-weight="700">── TECHNICAL ──</text>
+  <text x="938" y="375" font-size="8.5" fill="#1e3d5e">tech_verification_score</text>
+  <text x="938" y="387" font-size="8.5" fill="#1e3d5e">tech_vulnerability_count</text>
+  <text x="938" y="399" font-size="8.5" fill="#1e3d5e">tech_eng_quality_score</text>
+  <text x="938" y="414" font-size="8" fill="#d2a8ff" font-weight="700">── SENTIMENT ──</text>
+  <text x="938" y="426" font-size="8.5" fill="#43305c">sent_net_inflow_strength</text>
+  <text x="938" y="438" font-size="8.5" fill="#43305c">sent_turnover</text>
+  <text x="938" y="450" font-size="8.5" fill="#43305c">sent_ethos_reputation</text>
+  <text x="938" y="462" font-size="8.5" fill="#43305c">sent_onchain_engagement</text>
+  <line x1="935" y1="469" x2="1135" y2="469" stroke="#2e1065" stroke-width="1"/>
+  <text x="1035" y="482" text-anchor="middle" font-size="8" fill="#4c1d95">ON CONFLICT (as_of_date) DO UPDATE</text>
+  <text x="1035" y="494" text-anchor="middle" font-size="8" fill="#3b1778">written by compute_scores.py · Step 7</text>
+  <text x="1035" y="510" text-anchor="middle" font-size="8.5" fill="#5b21b6">Click for full column details →</text>
+</g>
+
+<!-- Compute → Target animated -->
+<line class="edge edge-animated" data-from="n-compute" data-to="n-target"
+  x1="909" y1="320" x2="928" y2="320" stroke="#8957e5" stroke-width="2.5" marker-end="url(#ap)"/>
+
+<!-- SCORED OUTPUT Col 6 -->
+<g class="node" id="n-scored" data-type="scored">
+  <rect x="1162" y="96" width="206" height="290" rx="7" fill="#0a2018" stroke="#2ea043" stroke-width="1.5"/>
+  <text x="1265" y="115" text-anchor="middle" font-size="9" fill="#3fb950" font-weight="700">SCORED TABLE · backend_only</text>
+  <text x="1265" y="131" text-anchor="middle" font-size="12" fill="#ffffff" font-weight="700">sail_scores_daily</text>
+  <line x1="1167" y1="138" x2="1363" y2="138" stroke="#0d4a21" stroke-width="1"/>
+  <text x="1170" y="152" font-size="8.5" fill="#2ea043">PK  as_of_date</text>
+  <text x="1170" y="165" font-size="8.5" fill="#0f5028">perf_category     0–100</text>
+  <text x="1170" y="177" font-size="8.5" fill="#0f5028">risk_category     0–100</text>
+  <text x="1170" y="189" font-size="8.5" fill="#0f5028">stab_category     0–100</text>
+  <text x="1170" y="201" font-size="8.5" fill="#0f5028">tech_category     0–100</text>
+  <text x="1170" y="213" font-size="8.5" fill="#0f5028">sent_category     0–100</text>
+  <text x="1170" y="225" font-size="8.5" fill="#0f5028">all sub-metric scores</text>
+  <text x="1170" y="237" font-size="8.5" fill="#2ea043">missing_fields    jsonb</text>
+  <line x1="1167" y1="244" x2="1363" y2="244" stroke="#0d4a21" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="1170" y="257" font-size="8" fill="#0f5028">Written same run as target table</text>
+  <text x="1170" y="269" font-size="8" fill="#0f5028">via upsert_agent_scores()</text>
+  <rect x="1170" y="280" width="188" height="22" rx="5" fill="#0d4a21" stroke="#2ea043"/>
+  <text x="1264" y="294" text-anchor="middle" font-size="9" fill="#3fb950" font-weight="600">RLS · read_public ✓</text>
+  <text x="1170" y="316" font-size="8" fill="#3fb950">→ feeds agents_scores view</text>
+</g>
+<g class="node" id="n-upscaled" data-type="scored">
+  <rect x="1162" y="398" width="206" height="80" rx="7" fill="#0a2018" stroke="#2ea043" stroke-width="1"/>
+  <text x="1265" y="416" text-anchor="middle" font-size="9" fill="#3fb950" font-weight="700">SNAPSHOT · backend_only</text>
+  <text x="1265" y="431" text-anchor="middle" font-size="11" fill="#ffffff" font-weight="600">agents_scores_upscaled</text>
+  <text x="1170" y="446" font-size="8.5" fill="#0f5028">floor=60 upscale · one row per agent</text>
+  <text x="1170" y="458" font-size="8.5" fill="#0f5028">compute_upscaled_agent_scores()</text>
+  <text x="1170" y="470" font-size="8" fill="#3fb950">View: agents_scores → this table</text>
+</g>
+
+<!-- PUBLIC Col 7 -->
+<g class="node" id="n-bond" data-type="public">
+  <rect x="1382" y="160" width="178" height="110" rx="7" fill="#1c1305" stroke="#d29922" stroke-width="1.5"/>
+  <text x="1471" y="178" text-anchor="middle" font-size="9" fill="#d29922" font-weight="700">AGGREGATED · read_public</text>
+  <text x="1471" y="193" text-anchor="middle" font-size="12" fill="#ffffff" font-weight="700">bond_score_daily</text>
+  <line x1="1387" y1="200" x2="1555" y2="200" stroke="#5c3d09" stroke-width="1"/>
+  <text x="1390" y="213" font-size="8.5" fill="#9e7015">agent_name · as_of_date</text>
+  <text x="1390" y="225" font-size="8.5" fill="#9e7015">perf/risk/stab/tech/sent_category</text>
+  <text x="1390" y="237" font-size="8.5" fill="#9e7015">bond_score (composite)</text>
+  <text x="1390" y="249" font-size="8" fill="#9e7015">Click for weight details →</text>
+</g>
+
+<line class="edge" data-from="n-compute" data-to="n-scored"
+  x1="909" y1="220" x2="1160" y2="220" stroke="#2ea043" stroke-width="1.8" marker-end="url(#agr)"/>
+<line class="edge" data-from="n-compute" data-to="n-upscaled"
+  x1="909" y1="430" x2="1160" y2="436" stroke="#2ea043" stroke-width="1.4" marker-end="url(#agr)" opacity=".7"/>
+<path class="edge" data-from="n-compute" data-to="n-bond"
+  d="M909,460 C1000,460 1300,460 1300,215 C1300,215 1350,215 1380,215"
+  stroke="#d29922" stroke-width="1.6" fill="none" marker-end="url(#aam)" opacity=".8"/>
+
+<!-- Dune agent-totals ingest (STEP 5 alongside scattering_engagement · orchestration.yml) -->
+<g class="node" id="n-dune-totals-api" data-type="source">
+  <rect x="8" y="660" width="178" height="52" rx="6" fill="#1c1305" stroke="#d29922"/>
+  <text x="16" y="675" font-size="8" fill="#e3b341" font-weight="700">EXTERNAL API</text>
+  <text x="16" y="689" font-size="10.5" fill="#ffffff" font-weight="600">Dune Analytics API</text>
+  <text x="16" y="703" font-size="8.5" fill="#9e7015">vol/tx queries + protocols (6913609)</text>
+</g>
+<g class="node" id="n-sc-dune-totals" data-type="script">
+  <rect x="218" y="654" width="192" height="64" rx="6" fill="#1c1305" stroke="#d29922"/>
+  <text x="226" y="669" font-size="8" fill="#e3b341" font-weight="700">STEP 5 · Python</text>
+  <text x="226" y="683" font-size="10.5" fill="#ffffff" font-weight="600">ingest_agent_totals_dune.py</text>
+  <text x="226" y="697" font-size="8.5" fill="#9e7015">vol/tx + protocols query 6913609</text>
+  <text x="226" y="711" font-size="8" fill="#9e7015">Storage-first → dune/incoming/</text>
+</g>
+<g class="node" id="n-t-dune-totals" data-type="table">
+  <rect x="432" y="654" width="214" height="64" rx="6" fill="#1c1305" stroke="#d29922"/>
+  <text x="440" y="669" font-size="8" fill="#e3b341" font-weight="700">ANALYTICS TABLE · backend_only</text>
+  <text x="440" y="683" font-size="10.5" fill="#ffffff" font-weight="600">agent_totals_dune_ingest</text>
+  <text x="440" y="697" font-size="8.5" fill="#9e7015">vol · tx_count · protocols jsonb</text>
+  <text x="440" y="711" font-size="8" fill="#7a5010">⚠ not read by compute_scores.py</text>
+</g>
+<line class="edge" data-from="n-dune-totals-api" data-to="n-sc-dune-totals" x1="186" y1="686" x2="216" y2="686" stroke="#d29922" stroke-width="1.3" marker-end="url(#aam)"/>
+<line class="edge" data-from="n-sc-dune-totals" data-to="n-t-dune-totals" x1="410" y1="686" x2="430" y2="686" stroke="#d29922" stroke-width="1.3" marker-end="url(#aam)"/>
+
+<!-- Footer -->
+<rect x="8" y="770" width="640" height="94" rx="6" fill="#0d1117" stroke="#21262d"/>
+<text x="18" y="787" font-size="9" fill="#e6edf3" font-weight="700">EXECUTION ORDER · run_update_and_scores.py</text>
+<text x="18" y="803" font-size="8.5" fill="#58a6ff">①  arma_performance_fetch    ②  zyfai_reward_price_fetch</text>
+<text x="18" y="816" font-size="8.5" fill="#58a6ff">③  yield_summation            ④  db_update  (incl. ingest_scattering)</text>
+<text x="18" y="829" font-size="8.5" fill="#58a6ff">⑤  ingest_scattering_engagement  +  ingest_agent_totals_dune</text>
+<text x="18" y="842" font-size="8.5" fill="#ffa657">⑥  ingest_ethos   (non-blocking)</text>
+<text x="18" y="855" font-size="8.5" fill="#d2a8ff">⑦  compute_scores → writes raw · scored · bond · upscaled</text>
+
+<rect x="670" y="770" width="410" height="48" rx="6" fill="#1e1208" stroke="#f0883e" stroke-dasharray="5,3"/>
+<text x="875" y="788" text-anchor="middle" font-size="8.5" fill="#f0883e" font-weight="700">⚠ SAIL ONLY — STANDALONE Dune ingest (NOT in orchestration)</text>
+<text x="875" y="802" text-anchor="middle" font-size="9" fill="#e3995a">ingest_sail_dune.py → sail_dune_data</text>
+<text x="875" y="814" text-anchor="middle" font-size="8" fill="#8a5020">Dune queries 6501329 (AUM) + 6501022 (TX) · Run independently</text>
+
+
+<rect x="670" y="828" width="230" height="48" rx="6" fill="#0b1a0e" stroke="#2ea043" stroke-dasharray="5,3"/>
+<text x="785" y="846" text-anchor="middle" font-size="8.5" fill="#56d364" font-weight="700">POST-SUCCESS · GHA Step</text>
+<text x="785" y="860" text-anchor="middle" font-size="10" fill="#ffffff" font-weight="600">Archive yield_breakdown.json</text>
+<text x="785" y="871" text-anchor="middle" font-size="8" fill="#3fb950">incoming/ → processed/YYYY-MM-DD/</text>
+<rect x="920" y="828" width="214" height="48" rx="6" fill="#1a1705" stroke="#d29922" stroke-dasharray="5,3"/>
+<text x="1027" y="846" text-anchor="middle" font-size="8.5" fill="#e3b341" font-weight="700">ALWAYS · GHA Step</text>
+<text x="1027" y="860" text-anchor="middle" font-size="10" fill="#ffffff" font-weight="600">Upload logs → Supabase Storage</text>
+<text x="1027" y="871" text-anchor="middle" font-size="8" fill="#d29922">logs/*.log  +  logs/*.jsonl</text>
+<rect x="1148" y="828" width="204" height="48" rx="6" fill="#1a0e1a" stroke="#a855f7" stroke-dasharray="5,3"/>
+<text x="1250" y="846" text-anchor="middle" font-size="8.5" fill="#c084fc" font-weight="700">ALWAYS · GHA Step</text>
+<text x="1250" y="860" text-anchor="middle" font-size="10" fill="#ffffff" font-weight="600">Send Telegram Alert</text>
+<text x="1250" y="871" text-anchor="middle" font-size="8" fill="#a855f7">bad signals only · notify_telegram_alerts.py</text>
+
+<text x="784" y="890" text-anchor="middle" font-size="10" fill="#30363d">Click any node for details · Hover to highlight connections · Use filter buttons to trace category data paths</text>
+</svg>
+</div>
+
+<div id="panel">
+  <div id="panel-header">
+    <div><div id="panel-badge"></div><div id="panel-title"></div></div>
+    <button id="panel-close">✕</button>
+  </div>
+  <div id="panel-body"></div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const META = {
+  'n-yield-file': {badge:'STORAGE FILE',badgeColor:'#58a6ff',title:'yield_breakdown.json',
+    sections:[{h:'Source',rows:[['Workflow','debank_scraper.yml'],['Storage','Supabase incoming/ bucket'],['Guard','< 180 min freshness check']]},
+    {h:'Note',note:'Contains Sail balance + APY from DeBank. No special token-incentive adjustment for Sail — base APY is used directly.'}]},
+  'n-scatter-api': {badge:'EXTERNAL API',badgeColor:'#58a6ff',title:'Scattering Protocol API',
+    sections:[{h:'Data',rows:[['Fields','aum_usd · deposits_usd · withdrawals_usd · day'],['agent_name','"Sail"']]},
+    {h:'Note',note:'PRIMARY series for compute_scores.py. All rolling perf/risk/stab/sent calculations use scattering_ingest (not sail_dune_data).'}]},
+  'n-engage-api': {badge:'EXTERNAL API',badgeColor:'#58a6ff',title:'Scattering Engagement API',
+    sections:[{h:'Data',rows:[['Score','engagement_score_0_100'],['Period','7D'],['agent_name','"Sail"']]},
+    {h:'Maps to',rows:[['Metric','sent_onchain_engagement'],['Weight','30% of Sentiment']]}]},
+  'n-ethos-api': {badge:'EXTERNAL API',badgeColor:'#58a6ff',title:'Ethos Network API',
+    sections:[{h:'Note',note:'Non-blocking: if rate-limited, pipeline continues using last persisted value for Sail.'}]},
+  'n-tech-research': {badge:'MANUAL DATA',badgeColor:'#79c0ff',title:'Tech Research Data',
+    sections:[{h:'Process',note:'Manually entered into technical_research_ingest.'}]},
+  'n-security': {badge:'SCANNER',badgeColor:'#79c0ff',title:'Audit / Scan Tools',
+    sections:[{h:'Maps to',rows:[['risk_smart_contract_score','sail_scores_raw_daily'],['tech_vulnerability_count','count']]}]},
+  'n-lindy-config': {badge:'STATIC CONFIG',badgeColor:'#56d364',title:'lindy_start_dates.json',
+    sections:[{h:'Sail entry',mono:'{\n  "Sail": "2024-07-18"\n}'},
+    {h:'Note',note:'Sail has been live since 2024-07-18 — giving it a healthy Lindy score compared to newer agents.'},
+    {h:'Usage',rows:[['Weight','40% of Stability'],['Cap','1095 days (3 years)']]}]},
+  'n-dune-api': {badge:'DUNE ANALYTICS API',badgeColor:'#f0883e',title:'Dune Analytics — Sail Queries',
+    sections:[{h:'Queries',rows:[['AUM query','6501329 (total_aum_usd · unique_wallets)'],['TX query','6501022 (tx_type · volume_usd · day)']]},
+    {h:'Fields from AUM',rows:[['total_aum_usd','Pool AUM on-chain'],['unique_wallets','Number of unique wallet holders']]},
+    {h:'Fields from TX',rows:[['tx_type','"deposit" or "redeem"/"withdraw"'],['volume_usd','USD value of transaction']]},
+    {h:'IMPORTANT',note:'This Dune path (sail_dune_data) is NOT part of the main orchestration. It is run standalone via ingest_sail_dune.py. compute_scores.py reads from scattering_ingest for Sail, not sail_dune_data.'}]},
+  'n-sc-dune': {badge:'STANDALONE SCRIPT',badgeColor:'#f0883e',title:'ingest_sail_dune.py',
+    sections:[{h:'Flow', rows:[
+      ['1. API','DuneClient.get_latest_result(6501329) → AUM rows'],
+      ['2. API','DuneClient.get_latest_result(6501022) → TX rows'],
+      ['3. Join','Merge AUM + TX by day key'],
+      ['4. Write','INSERT … ON CONFLICT (agent_name, day) DO NOTHING'],
+    ]},
+    {h:'Day Parsing',mono:'_parse_day("2025-01-15") → datetime UTC\n# Handles date-only and datetime strings'},
+    {h:'Note',note:'Not called in run_update_and_scores.py. Must be run independently as: python -m scripts.ingest_sail_dune'}]},
+  'n-t-sail-dune': {badge:'SUPPLEMENTARY TABLE',badgeColor:'#f0883e',title:'sail_dune_data',
+    sections:[{h:'Schema',rows:[['agent_name','"Sail"'],['timestamp','timestamptz'],['day','date'],['aum_usd','numeric'],['deposits_usd','numeric'],['withdrawals_usd','numeric'],['raw_json','jsonb']]},
+    {h:'Constraint',rows:[['UNIQUE','(agent_name, day)']]},
+    {h:'Status',note:'Populated by standalone ingest_sail_dune.py. NOT consumed by compute_scores.py. The scoring pipeline reads from scattering_ingest for Sail.'}]},
+  'n-compute': {badge:'PYTHON SCRIPT · STEP 7',badgeColor:'#a78bfa',title:'compute_scores.py — Sail',
+    sections:[{h:'Category Weights',rows:[['Performance','0.30'],['Risk','0.25'],['Stability','0.20'],['Sentiment','0.15'],['Technical','0.10']]},
+    {h:'Agent',rows:[['agent_name','"Sail"'],['table_prefix','sail'],['series_table','scattering_ingest (NOT sail_dune_data)']]},
+    {h:'Note',note:'Sail has a longer Lindy history than Mamo/Surfliquid (start 2024-07-18), giving it higher stab_lindy_days.'}]},
+  'n-target': {badge:'TARGET TABLE · backend_only',badgeColor:'#d2a8ff',title:'sail_scores_raw_daily',
+    sections:[{h:'Primary Key',rows:[['as_of_date','date NOT NULL']]},
+    {h:'Note',note:'Same structure as all *_scores_raw_daily tables. Stores raw metric values before sigmoid transform.'}]},
+  'n-scored': {badge:'SCORED TABLE · read_public',badgeColor:'#3fb950',title:'sail_scores_daily',
+    sections:[{h:'vs raw',note:'sail_scores_raw_daily → raw values. sail_scores_daily → sigmoid-transformed 0–100 + category aggregates + missing_fields.'},
+    {h:'RLS',rows:[['Policy','read_public'],['Consumers','Frontend · agents_scores view']]}]},
+  'n-upscaled': {badge:'SNAPSHOT',badgeColor:'#3fb950',title:'agents_scores_upscaled',
+    sections:[{h:'Formula',mono:'upscale(v) = 60 + (v / 100) * 40'}]},
+  'n-bond': {badge:'AGGREGATED · read_public',badgeColor:'#e3b341',title:'bond_score_daily',
+    sections:[{h:'Bond Score Weights',rows:[['Performance','30%'],['Risk','25%'],['Stability','20%'],['Sentiment','15%'],['Technical','10%']]}]},
+};
+
+const CONN = {
+  'n-scraper-wf':['n-debank-script'],'n-debank-script':['n-scraper-wf','n-storage'],
+  'n-storage':['n-debank-script','n-guard'],'n-guard':['n-storage'],
+  'n-yield-file':['n-sc-yield'],'n-scatter-api':['n-sc-scatter'],
+  'n-engage-api':['n-sc-engage'],'n-ethos-api':['n-sc-ethos'],
+  'n-tech-research':['n-sc-manual'],'n-security':['n-sc-scan'],'n-lindy-config':['n-sc-lindy'],
+  'n-dune-api':['n-sc-dune'],'n-sc-dune':['n-dune-api','n-t-sail-dune'],'n-t-sail-dune':['n-sc-dune'],
+  'n-sc-yield':['n-yield-file','n-t-yshr'],'n-sc-scatter':['n-scatter-api','n-t-scatter'],
+  'n-sc-engage':['n-engage-api','n-t-engage'],'n-sc-ethos':['n-ethos-api','n-t-ethos'],
+  'n-sc-manual':['n-tech-research','n-t-tech'],'n-sc-scan':['n-security','n-t-security'],
+  'n-sc-lindy':['n-lindy-config','n-compute'],
+  'n-t-yshr':['n-sc-yield','n-compute'],'n-t-scatter':['n-sc-scatter','n-compute'],
+  'n-t-engage':['n-sc-engage','n-compute'],'n-t-ethos':['n-sc-ethos','n-compute'],
+  'n-t-tech':['n-sc-manual','n-compute'],'n-t-security':['n-sc-scan','n-compute'],
+  'n-compute':['n-t-yshr','n-t-scatter','n-t-engage','n-t-ethos','n-t-tech','n-t-security','n-sc-lindy','n-target','n-scored','n-upscaled','n-bond'],
+  'n-target':['n-compute'],'n-scored':['n-compute'],'n-upscaled':['n-compute'],'n-bond':['n-compute'],
+};
+
+const CAT_NODES = {
+  perf:['n-yield-file','n-sc-yield','n-t-yshr','n-scatter-api','n-sc-scatter','n-t-scatter','n-compute','n-target','n-scored','n-bond'],
+  risk:['n-t-scatter','n-security','n-sc-scan','n-t-security','n-compute','n-target','n-scored','n-bond'],
+  stab:['n-scatter-api','n-sc-scatter','n-t-scatter','n-lindy-config','n-sc-lindy','n-compute','n-target','n-scored','n-bond'],
+  tech:['n-tech-research','n-sc-manual','n-t-tech','n-security','n-sc-scan','n-t-security','n-compute','n-target','n-scored','n-bond'],
+  sent:['n-scatter-api','n-sc-scatter','n-t-scatter','n-engage-api','n-sc-engage','n-t-engage','n-ethos-api','n-sc-ethos','n-t-ethos','n-compute','n-target','n-scored','n-bond'],
+};
+
+const svg=document.getElementById('dag'),panel=document.getElementById('panel'),
+  pBadge=document.getElementById('panel-badge'),pTitle=document.getElementById('panel-title'),
+  pBody=document.getElementById('panel-body');
+let activeFilter=null;
+
+svg.querySelectorAll('.node').forEach(node=>{
+  node.addEventListener('mouseenter',()=>{
+    if(activeFilter)return;
+    svg.classList.add('has-focus');node.classList.add('focused');
+    const c=new Set(CONN[node.id]||[]);
+    svg.querySelectorAll('.node').forEach(n=>{if(c.has(n.id))n.classList.add('connected');});
+    svg.querySelectorAll('.edge').forEach(e=>{if(e.dataset.from===node.id||e.dataset.to===node.id)e.classList.add('focused-edge');});
+  });
+  node.addEventListener('mouseleave',()=>{
+    if(activeFilter)return;
+    svg.classList.remove('has-focus');
+    svg.querySelectorAll('.node').forEach(n=>n.classList.remove('focused','connected'));
+    svg.querySelectorAll('.edge').forEach(e=>e.classList.remove('focused-edge'));
+  });
+  node.addEventListener('click',e=>{e.stopPropagation();openPanel(node.id);});
+});
+
+function openPanel(id){
+  const m=META[id];if(!m)return;
+  pBadge.textContent=m.badge;pBadge.style.color=m.badgeColor;
+  pTitle.textContent=m.title;pBody.innerHTML='';
+  (m.sections||[]).forEach(sec=>{
+    const div=document.createElement('div');div.className='p-section';
+    const h=document.createElement('h3');h.textContent=sec.h;div.appendChild(h);
+    if(sec.rows)sec.rows.forEach(([k,v])=>{const r=document.createElement('div');r.className='p-row';r.innerHTML=`<span class="p-key">${k}</span><span class="p-val">${v}</span>`;div.appendChild(r);});
+    if(sec.note){const n=document.createElement('div');n.className='p-note';n.textContent=sec.note;div.appendChild(n);}
+    if(sec.mono){const m2=document.createElement('div');m2.className='p-mono';m2.textContent=sec.mono;div.appendChild(m2);}
+    pBody.appendChild(div);
+  });
+  panel.classList.add('open');
+}
+
+document.getElementById('panel-close').addEventListener('click',()=>panel.classList.remove('open'));
+document.addEventListener('click',e=>{if(!panel.contains(e.target))panel.classList.remove('open');});
+
+document.querySelectorAll('.filters button[data-cat]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const cat=btn.dataset.cat;
+    if(activeFilter===cat){clearFilter();return;}
+    activeFilter=cat;
+    document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const cn=new Set(CAT_NODES[cat]||[]);
+    svg.classList.add('has-focus');
+    svg.querySelectorAll('.node').forEach(n=>{n.classList.remove('focused','connected');if(cn.has(n.id))n.classList.add('focused');});
+    svg.querySelectorAll('.edge').forEach(e=>{e.classList.remove('focused-edge');if(cn.has(e.dataset.from)&&cn.has(e.dataset.to))e.classList.add('focused-edge');});
+  });
+});
+document.getElementById('btn-reset').addEventListener('click',clearFilter);
+function clearFilter(){
+  activeFilter=null;
+  document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('active'));
+  svg.classList.remove('has-focus');
+  svg.querySelectorAll('.node').forEach(n=>n.classList.remove('focused','connected'));
+  svg.querySelectorAll('.edge').forEach(e=>e.classList.remove('focused-edge'));
+}
+</script>
+</body>
+</html>
